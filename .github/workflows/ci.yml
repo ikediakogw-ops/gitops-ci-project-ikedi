@@ -3,6 +3,7 @@ name: Trello Automation
 on:
   pull_request:
     types: [opened, closed]
+    branches: [main]  # ⚡ GitHub likes specifying branches
 
 jobs:
   move-card:
@@ -10,13 +11,13 @@ jobs:
 
     steps:
       - name: Move card to Review when PR is opened
-        if: github.event.action == 'opened'
+        if: ${{ github.event.action == 'opened' }}
         run: |
           curl -X PUT "https://api.trello.com/1/cards/${{ secrets.TRELLO_CARD_ID }}" \
           --data "key=${{ secrets.TRELLO_KEY }}&token=${{ secrets.TRELLO_TOKEN }}&idList=${{ secrets.TRELLO_LIST_REVIEW }}"
 
       - name: Move card to Done when PR is merged
-        if: github.event.action == 'closed' && github.event.pull_request.merged == true
+        if: ${{ github.event.action == 'closed' && github.event.pull_request.merged == true }}
         run: |
           curl -X PUT "https://api.trello.com/1/cards/${{ secrets.TRELLO_CARD_ID }}" \
           --data "key=${{ secrets.TRELLO_KEY }}&token=${{ secrets.TRELLO_TOKEN }}&idList=${{ secrets.TRELLO_LIST_DONE }}"
