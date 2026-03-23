@@ -1,39 +1,22 @@
-name: CI Pipeline
+name: Trello Automation
 
 on:
-  push:
-    branches: [ "main", "feature/**" ]
   pull_request:
-    branches: [ "main" ]
+    types: [opened, closed]
 
 jobs:
-  test:
+  move-card:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Move card to Review when PR is opened
+        if: github.event.action == 'opened'
+        run: |
+          curl -X PUT "https://api.trello.com/1/cards/${{ secrets.TRELLO_CARD_ID }}" \
+          --data "key=${{ secrets.TRELLO_KEY }}&token=${{ secrets.TRELLO_TOKEN }}&idList=${{ secrets.TRELLO_LIST_REVIEW }}"
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
-
-    - name: Install dependencies
-      run: |
-        pip install -r requirements.txt
-
-    - name: Run Lint
-      run: |
-        flake8 app.py test_app.py
-
-    - name: Run Tests
-      run: |
-        pytest test_app.py -v
-
-    # 🔥 THIS IS THE MAGIC (TRELLO UPDATE)
-    - name: Update Trello Card on Success
-      if: success()
-      run: |
-        curl -X PUT "https://api.trello.com/1/cards/${{ secrets.TRELLO_CARD_ID }}" \
-        --data "key=${{ secrets.TRELLO_KEY }}&token=${{ secrets.TRELLO_TOKEN }}&name=CI Passed - $(date)"
+      - name: Move card to Done when PR is merged
+        if: github.event.action == 'closed' && github.event.pull_request.merged == true
+        run: |
+          curl -X PUT "https://api.trello.com/1/cards/${{ secrets.TRELLO_CARD_ID }}" \
+          --data "key=${{ secrets.TRELLO_KEY }}&token=${{ secrets.TRELLO_TOKEN }}&idList=${{ secrets.TRELLO_LIST_DONE }}"
