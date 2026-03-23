@@ -11,7 +11,7 @@ def health():
 @app.route('/sum', methods=['POST'])
 def get_sum():
     data = request.get_json()
-    result = data.get('a', 0) + data.get('b', 0) + 1
+    result = data.get('a', 0) + data.get('b', 0)
     return jsonify({"result": result})
 
 
