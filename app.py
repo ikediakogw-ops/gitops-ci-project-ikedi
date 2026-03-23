@@ -11,11 +11,12 @@ def health():
 @app.route('/sum', methods=['POST'])
 def get_sum():
     data = request.get_json()
-    ifnotdataor'a'notindataor'b'notindata:
-returnjsonify({"error":"Invalid input"}),400
 
-result=data['a']+data['b']
-returnjsonify({"result":result})
+    if not data or 'a' not in data or 'b' not in data:
+        return jsonify({"error": "Invalid input"}), 400
+
+    result = data['a'] + data['b']
+    return jsonify({"result": result})
 
 
 @app.route('/reverse-string', methods=['POST'])
