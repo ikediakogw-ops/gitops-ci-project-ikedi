@@ -1,23 +1,37 @@
-name: Trello Automation
+name: Move Trello Card
 
 on:
-  pull_request:
-    types: [opened, closed]
-    branches: [main]  # ⚡ GitHub likes specifying branches
+  push:
+    branches:
+      - main
 
 jobs:
   move-card:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Move card to Review when PR is opened
-        if: ${{ github.event.action == 'opened' }}
-        run: |
-          curl -X PUT "https://api.trello.com/1/cards/${{ secrets.TRELLO_CARD_ID }}" \
-          --data "key=${{ secrets.TRELLO_KEY }}&token=${{ secrets.TRELLO_TOKEN }}&idList=${{ secrets.TRELLO_LIST_REVIEW }}"
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-      - name: Move card to Done when PR is merged
-        if: ${{ github.event.action == 'closed' && github.event.pull_request.merged == true }}
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Move Trello Card
+        env:
+          TRELLO_KEY: ${{ secrets.TRELLO_KEY }}
+          TRELLO_TOKEN: ${{ secrets.TRELLO_TOKEN }}
+          SOURCE_LIST_ID: your_source_list_id_here
+          DEST_LIST_ID: your_destination_list_id_here
+          CARD_NAME: "Card Name to Move"
         run: |
-          curl -X PUT "https://api.trello.com/1/cards/${{ secrets.TRELLO_CARD_ID }}" \
-          --data "key=${{ secrets.TRELLO_KEY }}&token=${{ secrets.TRELLO_TOKEN }}&idList=${{ secrets.TRELLO_LIST_DONE }}"
+          echo "Fetching card ID from source list..."
+          CARD_ID=$(curl -s "https://api.trello.com/1/lists/$SOURCE_LIST_ID/cards?key=$TRELLO_KEY&token=$TRELLO_TOKEN" \
+            | jq -r ".[] | select(.name==\"$CARD_NAME\") | .id")
+
+          if [ -z "$CARD_ID" ]; then
+            echo "Card not found in the source list!"
+            exit 1
+          fi
+
+          echo "Moving card to destination list..."
+          curl -X PUT "https://api.trello.com/1/cards/$CARD_ID?idList=$DEST_LIST_ID&key=$TRELLO_KEY&token=$TRELLO_TOKEN"
+          echo "Card moved successfully!"
