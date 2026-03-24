@@ -12,7 +12,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Install jq
         run: sudo apt-get update && sudo apt-get install -y jq
@@ -29,6 +30,7 @@ jobs:
           CARD_LABEL=$(echo "$TEXT" | grep -oE 'TRELLO-[0-9]+' || true)
 
           if [[ -z "$CARD_LABEL" ]]; then
+            echo "No Trello ID found"
             exit 0
           fi
 
@@ -46,6 +48,7 @@ jobs:
             ' | head -n 1)
 
           if [[ -z "$CARD_ID" ]]; then
+            echo "No matching card"
             exit 0
           fi
 
@@ -60,17 +63,20 @@ jobs:
         if: env.CARD_ID != ''
         shell: bash
         run: |
-          if [[ "$GITHUB_EVENT_NAME" == "pull_request" && "${{ github.event.action }}" == "opened" ]]; then
-            TARGET_LIST="${{ secrets.TRELLO_LIST_IN_PROGRESS }}"
-          elif [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
-            TARGET_LIST="${{ secrets.TRELLO_LIST_REVIEW }}"
-          elif [[ "$GITHUB_EVENT_NAME" == "pull_request" && "${{ github.event.pull_request.merged }}" == "true" ]]; then
+          # Move to Review on PR open or push
+          # Move to Done on PR merge
+
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" && "${{ github.event.pull_request.merged }}" == "true" ]]; then
             TARGET_LIST="${{ secrets.TRELLO_LIST_DONE }}"
+            echo "Moving to DONE"
           else
-            exit 0
+            TARGET_LIST="${{ secrets.TRELLO_LIST_REVIEW }}"
+            echo "Moving to REVIEW"
           fi
 
           curl -s -X PUT "https://api.trello.com/1/cards/$CARD_ID" \
             --data "key=${{ secrets.TRELLO_KEY }}" \
             --data "token=${{ secrets.TRELLO_TOKEN }}" \
             --data "idList=$TARGET_LIST"
+
+          echo "Card moved successfully!"
