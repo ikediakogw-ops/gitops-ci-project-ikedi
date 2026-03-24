@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Install jq
@@ -38,11 +38,17 @@ jobs:
 
           echo "CARD_LABEL=$CARD_LABEL" >> $GITHUB_ENV
 
-      - name: Get Card ID
+      - name: Fetch Card ID
         if: env.CARD_LABEL != ''
         shell: bash
         run: |
           RESPONSE=$(curl -s "https://api.trello.com/1/boards/${TRELLO_BOARD_ID}/cards?key=${TRELLO_KEY}&token=${TRELLO_TOKEN}")
+
+          # Ensure response is valid JSON
+          if ! echo "$RESPONSE" | jq empty >/dev/null 2>&1; then
+            echo "Invalid Trello API response"
+            exit 1
+          fi
 
           CARD_ID=$(echo "$RESPONSE" | jq -r --arg LABEL "$CARD_LABEL" '
             .[]
@@ -68,10 +74,8 @@ jobs:
         run: |
           if [[ "$GITHUB_EVENT_NAME" == "pull_request" && "${{ github.event.pull_request.merged }}" == "true" ]]; then
             TARGET_LIST="${{ secrets.TRELLO_LIST_DONE }}"
-            echo "Moving to DONE"
           else
             TARGET_LIST="${{ secrets.TRELLO_LIST_REVIEW }}"
-            echo "Moving to REVIEW"
           fi
 
           curl -s -X PUT "https://api.trello.com/1/cards/$CARD_ID" \
