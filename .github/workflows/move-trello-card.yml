@@ -1,8 +1,9 @@
 name: Move Trello Card
-
 on:
   pull_request:
-    types: [opened, closed]
+    types: 
+      - opened
+      - closed
     branches:
       - main
 
@@ -24,11 +25,6 @@ jobs:
             .[] | select(.name | contains($TICKET)) | .id
           ' | head -n 1)
           echo "CARD_ID=$CARD_ID" >> $GITHUB_ENV
-
-      - name: Debug
-        run: |
-          echo "Ticket: $TICKET"
-          echo "Card ID: $CARD_ID"
 
       - name: Move card to Review or Done
         if: env.CARD_ID != ''
