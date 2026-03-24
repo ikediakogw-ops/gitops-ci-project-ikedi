@@ -1,69 +1,26 @@
-name: Move Trello Card
+name: CI Pipeline
 
 on:
+  push:
+    branches:
+      - main
   pull_request:
-    types: [opened, closed]
-    branches: [main]
+    branches:
+      - main
 
 jobs:
-  move-card:
+  build:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Extract ticket from PR title
-        run: |
-          TITLE="${{ github.event.pull_request.title }}"
-          TICKET=$(echo "$TITLE" | grep -oE 'TRELLO-[0-9]+')
-          echo "TICKET=$TICKET" >> $GITHUB_ENV
-
-      - name: Get matching Trello card
-        run: |
-          RESPONSE=$(curl -s "https://api.trello.com/1/lists/${{ secrets.TRELLO_LIST_TODO }}/cards?key=${{ secrets.TRELLO_KEY }}&token=${{ secrets.TRELLO_TOKEN }}")
-          CARD_ID=$(echo $RESPONSE | jq -r --arg TICKET "$TICKET" '
-            .[] | select(.name | contains($TICKET)) | .id
-          ' | head -n 1)
-          echo "CARD_ID=$CARD_ID" >> $GITHUB_ENV
-
-      - name: Debug
-        run: |
-          echo "Ticket: $TICKET"
-          echo "Card ID: $CARD_ID"
-
-      - name: Move to Review
-        if: github.event.action == 'opened' && env.CARD_ID != ''
-        run: |
-          curl -X PUT "https://api.trello.com/1/cards/${CARD_ID}" \
-          --data "key=${{ secrets.TRELLO_KEY }}&token=${{ secrets.TRELLO_TOKEN }}&idList=${{ secrets.TRELLO_LIST_REVIEW }}"
-
-      - name: Move to Done
-        if: github.event.action == 'closed' && github.event.pull_request.merged == true && env.CARD_ID != ''
-        run: |
-          curl -X PUT "https://api.trello.com/1/cards/${CARD_ID}" \
-          --data "key=${{ secrets.TRELLO_KEY }}&token=${{ secrets.TRELLO_TOKEN }}&idList=${{ secrets.TRELLO_LIST_DONE }}"
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+      - uses: actions/checkout@v3
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      - name: Install dependencies
+        run: npm install
+      - name: Run tests
+        run: npm test
 
 
 
