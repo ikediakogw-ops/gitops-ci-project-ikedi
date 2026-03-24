@@ -1,10 +1,10 @@
-cat > .github/workflows/move-trello-card.yml << 'EOF'
 name: Move Trello Card
 
 on:
   pull_request:
     types: [opened, closed]
-    branches: [main]
+    branches:
+      - main
 
 jobs:
   move-card:
@@ -19,15 +19,30 @@ jobs:
 
       - name: Fetch cards from Trello TODO list
         run: |
-          RESPONSE=$(curl -s "https://api.trello.com/1/lists/${{ secrets.TRELLO_LIST_TARGET }}/cards?key=${{ secrets.TRELLO_KEY }}&token=${{ secrets.TRELLO_TOKEN }}")
+          RESPONSE=$(curl -s "https://api.trello.com/1/lists/${{ secrets.TRELLO_LIST_TODO }}/cards?key=${{ secrets.TRELLO_KEY }}&token=${{ secrets.TRELLO_TOKEN }}")
           CARD_ID=$(echo "$RESPONSE" | jq -r --arg TICKET "$TICKET" '
             .[] | select(.name | contains($TICKET)) | .id
           ' | head -n 1)
           echo "CARD_ID=$CARD_ID" >> $GITHUB_ENV
 
+      - name: Debug
+        run: |
+          echo "Ticket: $TICKET"
+          echo "Card ID: $CARD_ID"
+
       - name: Move card to Review or Done
         if: env.CARD_ID != ''
         run: |
           if [[ "${{ github.event.action }}" == "opened" ]]; then
+            TARGET_LIST="${{ secrets.TRELLO_LIST_REVIEW }}"
+          elif [[ "${{ github.event.action }}" == "closed" ]] && [[ "${{ github.event.pull_request.merged }}" == "true" ]]; then
+            TARGET_LIST="${{ secrets.TRELLO_LIST_DONE }}"
+          else
+            echo "No action for this PR event"
+            exit 0
+          fi
 
-
+          curl -X PUT "https://api.trello.com/1/cards/${CARD_ID}" \
+            --data "key=${{ secrets.TRELLO_KEY }}" \
+            --data "token=${{ secrets.TRELLO_TOKEN }}" \
+            --data "idList=${TARGET_LIST}"
