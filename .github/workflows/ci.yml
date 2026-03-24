@@ -1,0 +1,47 @@
+name: Trello Automation
+
+on:
+  pull_request:
+    types: [opened, closed]
+
+jobs:
+  trello:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set environment variables
+        run: |
+          echo "TRELLO_KEY=${{ secrets.TRELLO_KEY }}" >> $GITHUB_ENV
+          echo "TRELLO_TOKEN=${{ secrets.TRELLO_TOKEN }}" >> $GITHUB_ENV
+          echo "TRELLO_BOARD_ID=${{ secrets.TRELLO_BOARD_ID }}" >> $GITHUB_ENV
+          echo "TRELLO_LIST_REVIEW=${{ secrets.TRELLO_LIST_REVIEW }}" >> $GITHUB_ENV
+          echo "TRELLO_LIST_DONE=${{ secrets.TRELLO_LIST_DONE }}" >> $GITHUB_ENV
+
+      - name: Extract Trello card ID from branch
+        id: get_card
+        run: |
+          # Extract the Trello ID from branch name (e.g., TRELLO-001)
+          CARD_LABEL=$(echo "${GITHUB_HEAD_REF}" | grep -oE 'TRELLO-[0-9]+')
+          echo "CARD_LABEL=$CARD_LABEL"
+          
+          # Find the card ID on the board
+          CARD_ID=$(curl -s "https://api.trello.com/1/boards/${TRELLO_BOARD_ID}/cards?key=${TRELLO_KEY}&token=${TRELLO_TOKEN}" \
+            | jq -r ".[] | select(.name | test(\"$CARD_LABEL\")) | .id")
+          echo "CARD_ID=$CARD_ID"
+          echo "CARD_ID=$CARD_ID" >> $GITHUB_ENV
+
+      - name: Move card to correct list
+        run: |
+          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" && "${GITHUB_EVENT_ACTION}" == "opened" ]]; then
+            LIST_ID=${TRELLO_LIST_REVIEW}
+          elif [[ "${GITHUB_EVENT_NAME}" == "pull_request" && "${GITHUB_EVENT_ACTION}" == "closed" ]]; then
+            LIST_ID=${TRELLO_LIST_DONE}
+          else
+            echo "No action needed"
+            exit 0
+          fi
+
+          echo "Moving card $CARD_ID to list $LIST_ID"
+          curl -X PUT "https://api.trello.com/1/cards/${CARD_ID}?idList=${LIST_ID}&key=${TRELLO_KEY}&token=${TRELLO_TOKEN}"
