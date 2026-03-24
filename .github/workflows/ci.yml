@@ -25,55 +25,52 @@ jobs:
       - name: Extract Trello ID from branch name
         shell: bash
         run: |
-          # Determine branch name
           if [ "${GITHUB_EVENT_NAME}" == "pull_request" ]; then
             BRANCH_NAME="${GITHUB_HEAD_REF}"
           else
             BRANCH_NAME="${GITHUB_REF_NAME}"
           fi
+
           echo "Branch name: $BRANCH_NAME"
 
-          # Extract Trello card label
           CARD_LABEL=$(echo "$BRANCH_NAME" | grep -oE 'TRELLO-[0-9]+' || true)
-          echo "CARD_LABEL=$CARD_LABEL"
 
           if [ -z "$CARD_LABEL" ]; then
-            echo "No Trello card label found. Skipping card move."
+            echo "No Trello card label found. Skipping."
             exit 0
           fi
 
-          # Find the card ID on the board
           CARD_ID=$(curl -s "https://api.trello.com/1/boards/${TRELLO_BOARD_ID}/cards?key=${TRELLO_KEY}&token=${TRELLO_TOKEN}" \
             | jq -r --arg LABEL "$CARD_LABEL" '.[] | select(.name | test($LABEL)) | .id' | head -n 1)
 
           if [ -z "$CARD_ID" ]; then
-            echo "No matching Trello card found for label $CARD_LABEL. Skipping."
+            echo "No matching Trello card found."
             exit 0
           fi
 
-          echo "CARD_ID=$CARD_ID"
           echo "CARD_ID=$CARD_ID" >> $GITHUB_ENV
+
         env:
           TRELLO_KEY: ${{ secrets.TRELLO_KEY }}
           TRELLO_TOKEN: ${{ secrets.TRELLO_TOKEN }}
           TRELLO_BOARD_ID: ${{ secrets.TRELLO_BOARD_ID }}
 
-      - name: Move card to Review/Done
+      - name: Move card
         if: env.CARD_ID != ''
         shell: bash
         run: |
           if [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
             TARGET_LIST="${{ secrets.TRELLO_LIST_REVIEW }}"
-          elif [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]] && [[ "${GITHUB_EVENT_PULL_REQUEST_MERGED}" == "true" ]]; then
+          elif [[ "${GITHUB_EVENT_NAME}" == "pull_request" && "${{ github.event.pull_request.merged }}" == "true" ]]; then
             TARGET_LIST="${{ secrets.TRELLO_LIST_DONE }}"
           else
             echo "No action needed."
             exit 0
           fi
 
-          echo "Moving card $CARD_ID to $TARGET_LIST..."
           curl -X PUT "https://api.trello.com/1/cards/$CARD_ID" \
             --data "key=${{ secrets.TRELLO_KEY }}" \
             --data "token=${{ secrets.TRELLO_TOKEN }}" \
             --data "idList=$TARGET_LIST"
+
           echo "Card moved successfully!"
