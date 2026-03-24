@@ -1,4 +1,4 @@
-name: Move Trello Card by Label
+name: Move Trello Card
 
 on:
   pull_request:
@@ -10,63 +10,38 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Get PR label
-        id: pr_label
+      - name: Extract ticket from PR title
         run: |
-          LABEL=$(echo '${{ toJson(github.event.pull_request.labels) }}' | jq -r '.[0].name')
-          echo "LABEL=$LABEL" >> $GITHUB_ENV
+          TITLE="${{ github.event.pull_request.title }}"
+          TICKET=$(echo "$TITLE" | grep -oE 'TRELLO-[0-9]+')
+          echo "TICKET=$TICKET" >> $GITHUB_ENV
 
-      - name: Fetch cards and match label
+      - name: Get matching Trello card
         run: |
           RESPONSE=$(curl -s "https://api.trello.com/1/lists/${{ secrets.TRELLO_LIST_TODO }}/cards?key=${{ secrets.TRELLO_KEY }}&token=${{ secrets.TRELLO_TOKEN }}")
 
-          CARD_ID=$(echo $RESPONSE | jq -r --arg LABEL "$LABEL" '
-            .[] | select(.labels[].name == $LABEL) | .id
+          CARD_ID=$(echo $RESPONSE | jq -r --arg TICKET "$TICKET" '
+            .[] | select(.name | contains($TICKET)) | .id
           ' | head -n 1)
 
           echo "CARD_ID=$CARD_ID" >> $GITHUB_ENV
 
       - name: Debug
         run: |
-          echo "PR Label: $LABEL"
-          echo "Matched Card ID: $CARD_ID"
+          echo "Ticket: $TICKET"
+          echo "Card ID: $CARD_ID"
 
-      - name: Move card to Review when PR is opened
-  if: ${{ github.event.action == 'opened' }}
-  env:
-    TRELLO_KEY: ${{ secrets.TRELLO_KEY }}
-    TRELLO_TOKEN: ${{ secrets.TRELLO_TOKEN }}
-    SOURCE_LIST_ID: your_source_list_id_here
-    DEST_LIST_ID: ${{ secrets.TRELLO_LIST_REVIEW }}
-    CARD_NAME: "Card Name to Move"
-  run: |
-    echo "Fetching card ID from source list..."
-    CARD_ID=$(curl -s "https://api.trello.com/1/lists/$SOURCE_LIST_ID/cards?key=$TRELLO_KEY&token=$TRELLO_TOKEN" \
-      | jq -r ".[] | select(.name==\"$CARD_NAME\") | .id")
-    
-    if [ -z "$CARD_ID" ]; then
-      echo "Card not found in the source list!"
-      exit 1
-    fi
+      - name: Move to Review
+        if: github.event.action == 'opened' && env.CARD_ID != ''
+        run: |
+          curl -X PUT "https://api.trello.com/1/cards/${CARD_ID}" \
+          --data "key=${{ secrets.TRELLO_KEY }}&token=${{ secrets.TRELLO_TOKEN }}&idList=${{ secrets.TRELLO_LIST_REVIEW }}"
 
-    echo "Moving card to Review list..."
-    curl -X PUT "https://api.trello.com/1/cards/$CARD_ID" \
-      --data "key=$TRELLO_KEY&token=$TRELLO_TOKEN&idList=$DEST_LIST_ID"
-    echo "Card moved successfully!"
-
-- name: Mo
-
-
-
-
-
-
-
-
-
-
-
-
+      - name: Move to Done
+        if: github.event.action == 'closed' && github.event.pull_request.merged == true && env.CARD_ID != ''
+        run: |
+          curl -X PUT "https://api.trello.com/1/cards/${CARD_ID}" \
+          --data "key=${{ secrets.TRELLO_KEY }}&token=${{ secrets.TRELLO_TOKEN }}&idList=${{ secrets.TRELLO_LIST_DONE }}"
 
 
 
