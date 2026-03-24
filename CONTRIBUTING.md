@@ -38,7 +38,7 @@ All commits must follow:
 
 Example:
 
-[TRELLO-002] Fix sum endpoint
+[TRELLO-002] Fix endpoint
 
 This helps track work back to Trello tasks.
 
