@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v3
 
       - name: Install jq
@@ -25,21 +25,24 @@ jobs:
       - name: Extract Trello ID from branch name
         shell: bash
         run: |
+          # Determine branch name
           if [ "${GITHUB_EVENT_NAME}" == "pull_request" ]; then
             BRANCH_NAME="${GITHUB_HEAD_REF}"
           else
             BRANCH_NAME="${GITHUB_REF_NAME}"
           fi
-
           echo "Branch name: $BRANCH_NAME"
+
+          # Extract Trello card label
           CARD_LABEL=$(echo "$BRANCH_NAME" | grep -oE 'TRELLO-[0-9]+' || true)
           echo "CARD_LABEL=$CARD_LABEL"
 
           if [ -z "$CARD_LABEL" ]; then
-            echo "No Trello card label found. Skipping."
+            echo "No Trello card label found. Skipping card move."
             exit 0
           fi
 
+          # Find the card ID on the board
           CARD_ID=$(curl -s "https://api.trello.com/1/boards/${TRELLO_BOARD_ID}/cards?key=${TRELLO_KEY}&token=${TRELLO_TOKEN}" \
             | jq -r --arg LABEL "$CARD_LABEL" '.[] | select(.name | test($LABEL)) | .id' | head -n 1)
 
