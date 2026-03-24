@@ -16,7 +16,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install jq
-        run: sudo apt-get update && sudo apt-get install -y jq
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq
 
       - name: Extract Trello ID
         shell: bash
@@ -40,15 +42,16 @@ jobs:
         if: env.CARD_LABEL != ''
         shell: bash
         run: |
-         CARD_ID=$(curl -s "https://api.trello.com/1/boards/${TRELLO_BOARD_ID}/cards?key=${TRELLO_KEY}&token=${TRELLO_TOKEN}" \
-  | jq -r --arg LABEL "$CARD_LABEL" '
-    .[]
-    | select((.name | contains($LABEL)) or (.labels[]?.name == $LABEL))
-    | .id
-  ' | head -n 1)
+          RESPONSE=$(curl -s "https://api.trello.com/1/boards/${TRELLO_BOARD_ID}/cards?key=${TRELLO_KEY}&token=${TRELLO_TOKEN}")
+
+          CARD_ID=$(echo "$RESPONSE" | jq -r --arg LABEL "$CARD_LABEL" '
+            .[]
+            | select((.name | contains($LABEL)) or (.labels[]?.name == $LABEL))
+            | .id
+          ' | head -n 1)
 
           if [[ -z "$CARD_ID" ]]; then
-            echo "No matching card"
+            echo "No matching card found"
             exit 0
           fi
 
@@ -76,4 +79,4 @@ jobs:
             --data "token=${{ secrets.TRELLO_TOKEN }}" \
             --data "idList=$TARGET_LIST"
 
-          echo "Card moved successfully!"
+          echo "Card moved successfully"
