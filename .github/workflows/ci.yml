@@ -22,32 +22,61 @@ jobs:
       - name: Install jq
         run: sudo apt-get update && sudo apt-get install -y jq
 
-      - name: Extract Trello ID from branch name
+      - name: Extract Trello Label
+        id: extract_label
         shell: bash
         run: |
-          if [ "${GITHUB_EVENT_NAME}" == "pull_request" ]; then
-            BRANCH_NAME="${GITHUB_HEAD_REF}"
+          echo "Event: $GITHUB_EVENT_NAME"
+
+          if [ "$GITHUB_EVENT_NAME" == "pull_request" ]; then
+            TEXT="${{ github.event.pull_request.title }}"
+            BRANCH="${{ github.head_ref }}"
           else
-            BRANCH_NAME="${GITHUB_REF_NAME}"
+            TEXT="$GITHUB_REF_NAME"
+            BRANCH="$GITHUB_REF_NAME"
           fi
 
-          echo "Branch name: $BRANCH_NAME"
+          echo "Branch: $BRANCH"
+          echo "Text to search: $TEXT"
 
-          CARD_LABEL=$(echo "$BRANCH_NAME" | grep -oE 'TRELLO-[0-9]+' || true)
+          CARD_LABEL=$(echo "$TEXT" | grep -oE 'TRELLO-[0-9]+' || true)
 
           if [ -z "$CARD_LABEL" ]; then
-            echo "No Trello card label found. Skipping."
+            echo "No Trello label found. Skipping."
             exit 0
           fi
 
-          CARD_ID=$(curl -s "https://api.trello.com/1/boards/${TRELLO_BOARD_ID}/cards?key=${TRELLO_KEY}&token=${TRELLO_TOKEN}" \
-            | jq -r --arg LABEL "$CARD_LABEL" '.[] | select(.name | test($LABEL)) | .id' | head -n 1)
+          echo "Found label: $CARD_LABEL"
+          echo "CARD_LABEL=$CARD_LABEL" >> $GITHUB_ENV
+
+      - name: Fetch Trello Card ID
+        if: env.CARD_LABEL != ''
+        id: get_card
+        shell: bash
+        run: |
+          echo "Fetching cards from board..."
+
+          RESPONSE=$(curl -s "https://api.trello.com/1/boards/${TRELLO_BOARD_ID}/cards?key=${TRELLO_KEY}&token=${TRELLO_TOKEN}")
+
+          echo "Sample cards:"
+          echo "$RESPONSE" | jq '.[0:3]'
+
+          CARD_ID=$(echo "$RESPONSE" | jq -r --arg LABEL "$CARD_LABEL" '
+            .[]
+            | select(
+                (.name | test($LABEL))
+                or
+                (.labels[]?.name == $LABEL)
+              )
+            | .id
+          ' | head -n 1)
 
           if [ -z "$CARD_ID" ]; then
             echo "No matching Trello card found."
             exit 0
           fi
 
+          echo "Found CARD_ID: $CARD_ID"
           echo "CARD_ID=$CARD_ID" >> $GITHUB_ENV
 
         env:
@@ -55,18 +84,24 @@ jobs:
           TRELLO_TOKEN: ${{ secrets.TRELLO_TOKEN }}
           TRELLO_BOARD_ID: ${{ secrets.TRELLO_BOARD_ID }}
 
-      - name: Move card
+      - name: Move Trello Card
         if: env.CARD_ID != ''
         shell: bash
         run: |
-          if [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
+          echo "Deciding target list..."
+
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
             TARGET_LIST="${{ secrets.TRELLO_LIST_REVIEW }}"
-          elif [[ "${GITHUB_EVENT_NAME}" == "pull_request" && "${{ github.event.pull_request.merged }}" == "true" ]]; then
+            echo "Push detected → Move to REVIEW"
+          elif [[ "$GITHUB_EVENT_NAME" == "pull_request" && "${{ github.event.pull_request.merged }}" == "true" ]]; then
             TARGET_LIST="${{ secrets.TRELLO_LIST_DONE }}"
+            echo "PR merged → Move to DONE"
           else
             echo "No action needed."
             exit 0
           fi
+
+          echo "Moving card $CARD_ID to list $TARGET_LIST..."
 
           curl -X PUT "https://api.trello.com/1/cards/$CARD_ID" \
             --data "key=${{ secrets.TRELLO_KEY }}" \
