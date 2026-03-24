@@ -63,9 +63,6 @@ jobs:
         if: env.CARD_ID != ''
         shell: bash
         run: |
-          # Move to Review on PR open or push
-          # Move to Done on PR merge
-
           if [[ "$GITHUB_EVENT_NAME" == "pull_request" && "${{ github.event.pull_request.merged }}" == "true" ]]; then
             TARGET_LIST="${{ secrets.TRELLO_LIST_DONE }}"
             echo "Moving to DONE"
