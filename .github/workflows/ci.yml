@@ -32,13 +32,47 @@ jobs:
           echo "Matched Card ID: $CARD_ID"
 
       - name: Move card to Review when PR is opened
-        if: github.event.action == 'opened' && env.CARD_ID != ''
-        run: |
-          curl -X PUT "https://api.trello.com/1/cards/${CARD_ID}" \
-          --data "key=${{ secrets.TRELLO_KEY }}&token=${{ secrets.TRELLO_TOKEN }}&idList=${{ secrets.TRELLO_LIST_REVIEW }}"
+  if: ${{ github.event.action == 'opened' }}
+  env:
+    TRELLO_KEY: ${{ secrets.TRELLO_KEY }}
+    TRELLO_TOKEN: ${{ secrets.TRELLO_TOKEN }}
+    SOURCE_LIST_ID: your_source_list_id_here
+    DEST_LIST_ID: ${{ secrets.TRELLO_LIST_REVIEW }}
+    CARD_NAME: "Card Name to Move"
+  run: |
+    echo "Fetching card ID from source list..."
+    CARD_ID=$(curl -s "https://api.trello.com/1/lists/$SOURCE_LIST_ID/cards?key=$TRELLO_KEY&token=$TRELLO_TOKEN" \
+      | jq -r ".[] | select(.name==\"$CARD_NAME\") | .id")
+    
+    if [ -z "$CARD_ID" ]; then
+      echo "Card not found in the source list!"
+      exit 1
+    fi
 
-      - name: Move card to Done when PR is merged
-        if: github.event.action == 'closed' && github.event.pull_request.merged == true && env.CARD_ID != ''
-        run: |
-          curl -X PUT "https://api.trello.com/1/cards/${CARD_ID}" \
-          --data "key=${{ secrets.TRELLO_KEY }}&token=${{ secrets.TRELLO_TOKEN }}&idList=${{ secrets.TRELLO_LIST_DONE }}"
+    echo "Moving card to Review list..."
+    curl -X PUT "https://api.trello.com/1/cards/$CARD_ID" \
+      --data "key=$TRELLO_KEY&token=$TRELLO_TOKEN&idList=$DEST_LIST_ID"
+    echo "Card moved successfully!"
+
+- name: Move card to Done when PR is merged
+  if: ${{ github.event.action == 'closed' && github.event.pull_request.merged == true }}
+  env:
+    TRELLO_KEY: ${{ secrets.TRELLO_KEY }}
+    TRELLO_TOKEN: ${{ secrets.TRELLO_TOKEN }}
+    SOURCE_LIST_ID: your_source_list_id_here
+    DEST_LIST_ID: ${{ secrets.TRELLO_LIST_DONE }}
+    CARD_NAME: "Card Name to Move"
+  run: |
+    echo "Fetching card ID from source list..."
+    CARD_ID=$(curl -s "https://api.trello.com/1/lists/$SOURCE_LIST_ID/cards?key=$TRELLO_KEY&token=$TRELLO_TOKEN" \
+      | jq -r ".[] | select(.name==\"$CARD_NAME\") | .id")
+    
+    if [ -z "$CARD_ID" ]; then
+      echo "Card not found in the source list!"
+      exit 1
+    fi
+
+    echo "Moving card to Done list..."
+    curl -X PUT "https://api.trello.com/1/cards/$CARD_ID" \
+      --data "key=$TRELLO_KEY&token=$TRELLO_TOKEN&idList=$DEST_LIST_ID"
+    echo "Card moved successfully!"
