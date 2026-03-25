@@ -41,19 +41,21 @@ jobs:
       - name: Fetch Card ID
         if: env.CARD_LABEL != ''
         shell: bash
+        env:
+          TRELLO_KEY: ${{ secrets.TRELLO_KEY }}
+          TRELLO_TOKEN: ${{ secrets.TRELLO_TOKEN }}
+          TRELLO_BOARD_ID: ${{ secrets.TRELLO_BOARD_ID }}
         run: |
           RESPONSE=$(curl -s "https://api.trello.com/1/boards/${TRELLO_BOARD_ID}/cards?key=${TRELLO_KEY}&token=${TRELLO_TOKEN}")
 
-          # Ensure response is valid JSON
+          # Validate JSON
           if ! echo "$RESPONSE" | jq empty >/dev/null 2>&1; then
             echo "Invalid Trello API response"
             exit 1
           fi
 
           CARD_ID=$(echo "$RESPONSE" | jq -r --arg LABEL "$CARD_LABEL" '
-            .[]
-            | select((.name | contains($LABEL)) or (.labels[]?.name == $LABEL))
-            | .id
+            .[] | select(.name | test($LABEL)) | .id
           ' | head -n 1)
 
           if [[ -z "$CARD_ID" ]]; then
@@ -63,20 +65,29 @@ jobs:
 
           echo "CARD_ID=$CARD_ID" >> $GITHUB_ENV
 
-        env:
-          TRELLO_KEY: ${{ secrets.TRELLO_KEY }}
-          TRELLO_TOKEN: ${{ secrets.TRELLO_TOKEN }}
-          TRELLO_BOARD_ID: ${{ secrets.TRELLO_BOARD_ID }}
-
       - name: Move Card
         if: env.CARD_ID != ''
         shell: bash
         run: |
-          if [[ "$GITHUB_EVENT_NAME" == "pull_request" && "${{ github.event.pull_request.merged }}" == "true" ]]; then
-            TARGET_LIST="${{ secrets.TRELLO_LIST_DONE }}"
+          echo "Event: $GITHUB_EVENT_NAME"
+
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            echo "PR merged: ${{ github.event.pull_request.merged }}"
+
+            if [[ "${{ github.event.pull_request.merged }}" == "true" ]]; then
+              TARGET_LIST="${{ secrets.TRELLO_LIST_DONE }}"
+              echo "Moving to DONE"
+            else
+              echo "PR closed but not merged — skipping"
+              exit 0
+            fi
           else
             TARGET_LIST="${{ secrets.TRELLO_LIST_REVIEW }}"
+            echo "Moving to REVIEW"
           fi
+
+          echo "CARD_ID=$CARD_ID"
+          echo "TARGET_LIST=$TARGET_LIST"
 
           curl -s -X PUT "https://api.trello.com/1/cards/$CARD_ID" \
             --data "key=${{ secrets.TRELLO_KEY }}" \
